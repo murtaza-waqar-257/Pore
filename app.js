@@ -46,11 +46,11 @@
       <p>Scan, snap or type a product and see what may clog your pores. Just have fun with it.</p>
       <button class="btn" type="button" data-intro-close>Start checking</button>`;
     document.body.appendChild(d);
-    const close = () => { store.set("introSeen", true); d.close(); d.remove(); };
+    const close = () => { store.set("introSeen", true); document.body.classList.remove("intro-open"); d.close(); d.remove(); };
     d.querySelector("[data-intro-close]").addEventListener("click", close);
     d.addEventListener("cancel", (e) => { e.preventDefault(); close(); });
     d.addEventListener("click", (e) => { if (e.target === d) close(); });
-    if (typeof d.showModal === "function") d.showModal(); else d.remove();
+    if (typeof d.showModal === "function") { document.body.classList.add("intro-open"); d.showModal(); } else d.remove();
   }
 
   const productTitle = (p) => [p && p.brand, p && p.name].filter(Boolean).join(" ");
