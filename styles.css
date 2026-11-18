@@ -206,3 +206,11 @@ section.group details.item:last-of-type { border-bottom: 0; }
 .inline-link { color: var(--sea-deep); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; display: inline; }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* First-visit intro */
+dialog.intro { border: 0; padding: 36px 28px 28px; max-width: min(400px, calc(100vw - 40px)); background: var(--petal); color: var(--ink); border-radius: var(--radius); box-shadow: 0 1px 0 var(--line); }
+dialog.intro::backdrop { background: rgba(30, 38, 34, .42); }
+dialog.intro .mark.small { margin: 0 0 22px; }
+dialog.intro h2 { font-size: 26px; line-height: 1.15; font-weight: 750; font-variation-settings: "wdth" 108; margin: 0 0 14px; letter-spacing: -.01em; }
+dialog.intro p { margin: 0 0 10px; color: var(--muted); font-size: 17px; line-height: 1.5; }
+dialog.intro .btn { margin-top: 18px; width: 100%; }

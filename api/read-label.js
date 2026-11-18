@@ -3,21 +3,13 @@
 // Needs the environment variable ANTHROPIC_API_KEY (set it in Vercel, never in the page).
 // Optional: CLAUDE_MODEL (defaults to claude-haiku-5-5, the cheapest model).
 
+import { clientIp, sameOrigin, makeLimiter, cleanText, noStore } from "./_guard.js";
+
 const MODEL = process.env.CLAUDE_MODEL || "claude-haiku-5-5";
 const MAX_IMAGE_CHARS = 6_000_000; // ~4.5 MB of base64; the page sends ~300 KB
 const DAILY_LIMIT = Number(process.env.DAILY_SCANS_PER_IP || 40);
 
-// Basic per-IP limit. Resets whenever Vercel starts a fresh instance, so it stops
-// casual abuse, not a determined attacker. Also set a monthly spend limit in the Claude Console.
-const hits = new Map();
-function overLimit(ip) {
-  const day = new Date().toISOString().slice(0, 10);
-  const key = ip + "|" + day;
-  const n = (hits.get(key) || 0) + 1;
-  hits.set(key, n);
-  if (hits.size > 5000) hits.clear();
-  return n > DAILY_LIMIT;
-}
+const overLimit = makeLimiter(DAILY_LIMIT, Number(process.env.DAILY_SCANS_TOTAL || 3000));
 
 const SCHEMA = {
   type: "object",
@@ -42,11 +34,12 @@ const PROMPT = `This photo shows a skincare or makeup product: either its ingred
 3. If a barcode's digits are printed and fully readable, copy them with no spaces. Otherwise use "".`;
 
 export default async function handler(req, res) {
+  noStore(res);
   if (req.method !== "POST") return res.status(405).json({ error: "Use POST." });
+  if (!sameOrigin(req)) return res.status(403).json({ error: "Not allowed." });
   if (!process.env.ANTHROPIC_API_KEY) return res.status(500).json({ error: "Photo reading isn't set up yet (missing API key)." });
 
-  const ip = (req.headers["x-forwarded-for"] || "").split(",")[0].trim() || "unknown";
-  if (overLimit(ip)) return res.status(429).json({ error: "Daily scan limit reached. Type the ingredients instead, or try again tomorrow." });
+  if (overLimit(clientIp(req))) return res.status(429).json({ error: "Daily scan limit reached. Type the ingredients instead, or try again tomorrow." });
 
   const image = req.body && req.body.image;
   const m = typeof image === "string" && image.match(/^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/=]+)$/);
@@ -84,17 +77,16 @@ export default async function handler(req, res) {
     const text = (data.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
     let parsed;
     try { parsed = JSON.parse(text); } catch { parsed = { found: false, ingredients: [] }; }
-    const ingredients = (parsed.ingredients || []).map((s) => String(s).trim()).filter(Boolean).slice(0, 150);
+    const ingredients = (Array.isArray(parsed.ingredients) ? parsed.ingredients : []).map((s) => cleanText(s, 120)).filter(Boolean).slice(0, 150);
     const barcode = String(parsed.barcode || "").replace(/\D/g, "");
     return res.status(200).json({
       ingredients: parsed.found ? ingredients : [],
-      brand: String(parsed.brand || "").trim(),
-      product_name: String(parsed.product_name || "").trim(),
+      brand: cleanText(parsed.brand, 80),
+      product_name: cleanText(parsed.product_name, 120),
       barcode: barcode.length >= 8 && barcode.length <= 14 ? barcode : "",
-      usage: data.usage,
     });
   } catch (err) {
-    console.error(err);
+    console.error("read-label failed", err && err.message);
     return res.status(502).json({ error: "The label couldn't be read right now. Type the ingredients instead." });
   }
 }

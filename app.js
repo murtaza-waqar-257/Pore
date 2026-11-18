@@ -29,6 +29,30 @@
 
   const render = (html, keep) => { stopScanner(); const y = window.scrollY; app.innerHTML = html; window.scrollTo(0, keep ? y : 0); };
 
+  // Only ever link to normal web pages.
+  const safeUrl = (u) => { try { const x = new URL(u); return x.protocol === "https:" || x.protocol === "http:" ? x.href : ""; } catch { return ""; } };
+  const extLink = (u, text) => { const h = safeUrl(u); return h ? `<a href="${esc(h)}" target="_blank" rel="noopener noreferrer">${esc(text)}</a>` : esc(text); };
+
+  // First visit: a short note that the app is free.
+  function intro() {
+    if (store.get("introSeen", false)) return;
+    const d = document.createElement("dialog");
+    d.className = "intro";
+    d.setAttribute("aria-labelledby", "intro-title");
+    d.innerHTML = `
+      <div class="mark small" aria-hidden="true">pore</div>
+      <h2 id="intro-title">Free, and staying that way.</h2>
+      <p>No ads. No paywall. No sign-up.</p>
+      <p>Scan, snap or type a product and see what may clog your pores. Just have fun with it.</p>
+      <button class="btn" type="button" data-intro-close>Start checking</button>`;
+    document.body.appendChild(d);
+    const close = () => { store.set("introSeen", true); d.close(); d.remove(); };
+    d.querySelector("[data-intro-close]").addEventListener("click", close);
+    d.addEventListener("cancel", (e) => { e.preventDefault(); close(); });
+    d.addEventListener("click", (e) => { if (e.target === d) close(); });
+    if (typeof d.showModal === "function") d.showModal(); else d.remove();
+  }
+
   const productTitle = (p) => [p && p.brand, p && p.name].filter(Boolean).join(" ");
 
   async function api(path, opts) {
@@ -300,9 +324,9 @@
     const p = state.product;
     if (!p || !productTitle(p)) return "";
     const src = p.source === "web"
-      ? `Ingredients from <a href="${esc(p.url)}">${esc(p.sourceName || "a product page")}</a>.`
+      ? `Ingredients from ${extLink(p.url, p.sourceName || "a product page")}.`
       : (p.source === "barcode" || p.source === "search")
-        ? `Ingredients from <a href="${esc(p.url || "https://world.openbeautyfacts.org")}">Open Beauty Facts</a>.`
+        ? `Ingredients from ${extLink(p.url || "https://world.openbeautyfacts.org", "Open Beauty Facts")}.`
         : "";
     return `<div class="product">
       <strong>${esc(niceName(productTitle(p)))}</strong>
@@ -383,4 +407,5 @@
   }
 
   home();
+  intro();
 })();
