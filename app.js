@@ -61,6 +61,7 @@
         </button>
       </div>
       <p class="foot">Ratings come from lab studies, mostly on rabbit skin. They show what <em>may</em> clog pores, not what will. Not medical advice; patch-test new products.</p>
+      <p class="credit">Made by the goat Murtaza</p>
     `);
     wirePhoto();
     app.querySelector("[data-go=type]").addEventListener("click", () => { state.product = null; edit(""); });
@@ -371,7 +372,8 @@
       ${group("unknown", unknown, `<ul class="plain">${unknown.map((x) => `<li>${esc(x.label)}</li>`).join("")}</ul>`)}
       <div class="again"><button class="btn" data-again>Check another product</button>
       <button class="btn ghost" data-editlist>Edit this list</button></div>
-      <p class="foot">Ratings mostly come from rabbit-ear tests of single ingredients at full strength. A whole product can behave differently. Not medical advice; patch-test new products.</p>`, keep);
+      <p class="foot">Ratings mostly come from rabbit-ear tests of single ingredients at full strength. A whole product can behave differently. Not medical advice; patch-test new products.</p>
+      <p class="credit">Made by the goat Murtaza</p>`, keep);
     wireBar(); wirePhoto();
     app.querySelectorAll("[data-t]").forEach((t) => t.addEventListener("change", () => {
       state[t.dataset.t] = t.checked; store.set(t.dataset.t, t.checked); results(true);

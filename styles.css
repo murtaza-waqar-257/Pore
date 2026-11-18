@@ -57,6 +57,8 @@ header.bar { display: flex; align-items: baseline; justify-content: space-betwee
   color: var(--sea-deep); text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 1px;
 }
 
+.credit { margin: 18px 0 0; font-size: 14px; font-weight: 600; color: var(--sea-deep); }
+
 /* The three ways in */
 .ways { display: grid; gap: 10px; }
 .way {
