@@ -17,29 +17,18 @@
     if (state.timer) { clearInterval(state.timer); state.timer = null; }
   }
 
-  // Loading screen: a mock label being scanned, plus the steps we're working through.
-  function loader(title, steps, start = 0) {
+  // Loading screen: just a quiet spinner and what we're checking.
+  function loader(title) {
     return `${bar()}
-      <div class="loader" role="status" aria-live="polite">
-        <div class="scan" aria-hidden="true">
-          <i style="width:92%"></i><i style="width:74%"></i><i style="width:86%"></i><i style="width:58%"></i><i style="width:80%"></i><i style="width:66%"></i>
-          <b></b>
-        </div>
-        <h1 class="title loader-title">${esc(title)}</h1>
-        <ol class="steps">${steps.map((t, i) => `<li class="${i < start ? "done" : i === start ? "now" : ""}">${esc(t)}</li>`).join("")}</ol>
+      <div class="loading" role="status" aria-live="polite">
+        <span class="spinner" aria-hidden="true"></span>
+        <p>${title ? `Checking <strong>${esc(title)}</strong>` : "Checking…"}</p>
       </div>`;
   }
-  // Move the highlighted step on every few seconds, stopping before the last one.
-  function advanceSteps(every = 4000) {
-    const items = () => [...app.querySelectorAll(".steps li")];
-    state.timer = setInterval(() => {
-      const li = items(), i = li.findIndex((x) => x.classList.contains("now"));
-      if (i < 0 || i >= li.length - 2) return;
-      li[i].classList.replace("now", "done");
-      li[i + 1].classList.add("now");
-    }, every);
-  }
+  function advanceSteps() {}
+
   const render = (html, keep) => { stopScanner(); const y = window.scrollY; app.innerHTML = html; window.scrollTo(0, keep ? y : 0); };
+
   const productTitle = (p) => [p && p.brand, p && p.name].filter(Boolean).join(" ");
 
   async function api(path, opts) {
@@ -146,7 +135,7 @@
 
   async function lookupBarcode(code, seen) {
     code = String(code).replace(/\D/g, "");
-    render(loader("Looking up this product", [`Reading barcode ${code}`, "Searching the product database", "Checking it against our list"], 1));
+    render(loader(""));
     wireBar();
     try {
       const body = await api(`/api/product?barcode=${encodeURIComponent(code)}`);
@@ -192,7 +181,7 @@
     let dataUrl;
     try { dataUrl = await shrink(file); }
     catch { return photoError(null, "That file couldn't be opened as an image. Try another photo, or type the ingredients."); }
-    render(loader("Reading your photo", ["Reading the label", "Finding the product or its ingredients", "Checking them against our list"]));
+    render(loader(""));
     wireBar();
     let body;
     try {
@@ -212,7 +201,7 @@
 
   async function searchProduct(seen) {
     const q = productTitle(seen);
-    render(loader(niceName(q), ["Reading the label", "Searching the product database", "Checking it against our list"], 1));
+    render(loader(niceName(q)));
     wireBar();
     try {
       const body = await api(`/api/product?q=${encodeURIComponent(q)}`);
@@ -227,8 +216,8 @@
 
   async function webLookup(seen) {
     const q = seen.barcode ? `barcode ${seen.barcode}` : productTitle(seen);
-    render(loader(seen.barcode ? "Finding this product" : niceName(q), ["Reading the label", "Searching shops and ingredient sites", "Copying the ingredient list", "Checking it against our list"], 1));
-    wireBar(); advanceSteps(5000);
+    render(loader(seen.barcode ? "" : niceName(q)));
+    wireBar();
     try {
       const body = await api("/api/web-ingredients", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(seen) });
       if (!body.found) return notFound(`We couldn't find the ingredient list for ${q}.`);
