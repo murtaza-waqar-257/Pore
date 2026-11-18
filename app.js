@@ -291,7 +291,7 @@
     const note = fromDb
       ? `Ingredients from <a href="${esc(p.url || "https://world.openbeautyfacts.org")}">Open Beauty Facts</a>. Formulas change, so check they match your pack.`
       : p.source === "web"
-        ? `Ingredients found on <a href="${esc(p.url)}">${esc(p.sourceName || "the web")}</a> . Check they match your pack.`
+        ? `Ingredients found on <a href="${esc(p.url)}">${esc(p.sourceName || "the web")}</a>. Check they match your pack.`
         : "";
     return `<div class="product">
       <strong>${esc(productTitle(p))}</strong>
