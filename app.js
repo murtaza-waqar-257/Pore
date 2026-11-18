@@ -128,34 +128,79 @@
       if (!f) return;
       msg.textContent = "Reading the barcode in your photo…";
       const url = URL.createObjectURL(f);
-      try {
-        const result = await new ZXingBrowser.BrowserMultiFormatReader().decodeFromImageUrl(url);
-        lookupBarcode(result.getText());
-      } catch {
-        msg.textContent = "No barcode found in that photo. Try a closer, sharper photo, or type the numbers.";
-      } finally { URL.revokeObjectURL(url); }
+      let code = "";
+      try { code = (await makeReader().decodeFromImageUrl(url)).getText(); } catch {}
+      finally { URL.revokeObjectURL(url); }
+      // If the scanner can't read it, let Claude read the digits or the product name from the photo.
+      if (code) lookupBarcode(code); else readPhoto(f);
     });
 
     const video = app.querySelector("#cam");
-    if (!window.ZXingBrowser || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || (!window.ZXingBrowser && !("BarcodeDetector" in window))) {
       app.querySelector(".viewfinder").remove();
       msg.textContent = "Live scanning isn't available in this browser. Use a photo of the barcode, or type the numbers.";
       return;
     }
-    const reader = new ZXingBrowser.BrowserMultiFormatReader();
     let got = false;
-    reader.decodeFromConstraints({ video: { facingMode: { ideal: "environment" } } }, video, (result, err, controls) => {
-      if (result && !got) {
-        got = true;
-        controls.stop();
-        if (navigator.vibrate) { try { navigator.vibrate(60); } catch {} }
-        lookupBarcode(result.getText());
-      }
-    }).then((controls) => { state.scanner = controls; })
-      .catch(() => {
-        const vf = app.querySelector(".viewfinder"); if (vf) vf.remove();
-        msg.textContent = "The camera couldn't start. Allow camera access in your browser settings, or use a photo of the barcode instead.";
-      });
+    const found = (text) => {
+      const code = String(text || "").replace(/\D/g, "");
+      if (got || code.length < 8 || code.length > 14) return;
+      got = true;
+      stopScanner();
+      if (navigator.vibrate) { try { navigator.vibrate(60); } catch {} }
+      lookupBarcode(code);
+    };
+    const fail = () => {
+      const vf = app.querySelector(".viewfinder"); if (vf) vf.remove();
+      msg.textContent = "The camera couldn't start. Allow camera access in your browser settings, or use a photo of the barcode instead.";
+    };
+    // Ask for a sharp, high-resolution picture with continuous focus: small barcodes need the pixels.
+    const constraints = { audio: false, video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 }, advanced: [{ focusMode: "continuous" }] } };
+    navigator.mediaDevices.getUserMedia(constraints).then(async (stream) => {
+      if (!document.body.contains(video)) { stream.getTracks().forEach((t) => t.stop()); return; }
+      state.scanner = { stop: () => stream.getTracks().forEach((t) => t.stop()) };
+      video.srcObject = stream;
+      video.setAttribute("playsinline", ""); video.muted = true;
+      try { await video.play(); } catch {}
+      const detector = await nativeDetector();
+      const reader = window.ZXingBrowser ? makeReader() : null;
+      // Each pass reads the middle of the frame (where the guide is) and then the whole frame.
+      const canvas = document.createElement("canvas"), ctx = canvas.getContext("2d", { willReadFrequently: true });
+      const tick = async () => {
+        if (got || !state.scanner || !video.videoWidth) return;
+        const w = video.videoWidth, h = video.videoHeight;
+        const regions = [[w * 0.1, h * 0.3, w * 0.8, h * 0.4], [0, 0, w, h]];
+        for (const [sx, sy, sw, sh] of regions) {
+          if (got) return;
+          const scale = Math.min(1, 1600 / sw); // shrink huge frames, never enlarge (it blurs the bars)
+          canvas.width = Math.round(sw * scale); canvas.height = Math.round(sh * scale);
+          ctx.drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+          try {
+            if (detector) { const r = await detector.detect(canvas); if (r && r[0]) return found(r[0].rawValue); }
+            else if (reader) return found(reader.decodeFromCanvas(canvas).getText());
+          } catch {}
+        }
+      };
+      state.timer = setInterval(() => { if (!state.busy) { state.busy = true; tick().finally(() => { state.busy = false; }); } }, 180);
+    }).catch(fail);
+  }
+
+  // A ZXing reader limited to product barcodes (and QR), trying harder on each frame.
+  function makeReader() {
+    const F = ZXingBrowser.BarcodeFormat;
+    const formats = [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.QR_CODE];
+    const hints = new Map([[2, formats], [3, true]]); // 2 = possible formats, 3 = try harder
+    return new ZXingBrowser.BrowserMultiFormatReader(hints);
+  }
+  // The phone's own barcode reader, where the browser has one (Chrome on Android does).
+  async function nativeDetector() {
+    try {
+      if (!("BarcodeDetector" in window)) return null;
+      const want = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "qr_code"];
+      const have = await window.BarcodeDetector.getSupportedFormats();
+      const formats = want.filter((f) => have.includes(f));
+      return formats.length ? new window.BarcodeDetector({ formats }) : null;
+    } catch { return null; }
   }
 
   async function lookupBarcode(code, seen) {
