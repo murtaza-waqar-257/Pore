@@ -12,7 +12,33 @@
   const state = { text: "", product: null, strict: store.get("strict", false), fungal: store.get("fungal", false), scanner: null };
 
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  function stopScanner() { if (state.scanner) { try { state.scanner.stop(); } catch {} state.scanner = null; } }
+  function stopScanner() {
+    if (state.scanner) { try { state.scanner.stop(); } catch {} state.scanner = null; }
+    if (state.timer) { clearInterval(state.timer); state.timer = null; }
+  }
+
+  // Loading screen: a mock label being scanned, plus the steps we're working through.
+  function loader(title, steps, start = 0) {
+    return `${bar()}
+      <div class="loader" role="status" aria-live="polite">
+        <div class="scan" aria-hidden="true">
+          <i style="width:92%"></i><i style="width:74%"></i><i style="width:86%"></i><i style="width:58%"></i><i style="width:80%"></i><i style="width:66%"></i>
+          <b></b>
+        </div>
+        <h1 class="title loader-title">${esc(title)}</h1>
+        <ol class="steps">${steps.map((t, i) => `<li class="${i < start ? "done" : i === start ? "now" : ""}">${esc(t)}</li>`).join("")}</ol>
+      </div>`;
+  }
+  // Move the highlighted step on every few seconds, stopping before the last one.
+  function advanceSteps(every = 4000) {
+    const items = () => [...app.querySelectorAll(".steps li")];
+    state.timer = setInterval(() => {
+      const li = items(), i = li.findIndex((x) => x.classList.contains("now"));
+      if (i < 0 || i >= li.length - 2) return;
+      li[i].classList.replace("now", "done");
+      li[i + 1].classList.add("now");
+    }, every);
+  }
   const render = (html, keep) => { stopScanner(); const y = window.scrollY; app.innerHTML = html; window.scrollTo(0, keep ? y : 0); };
   const productTitle = (p) => [p && p.brand, p && p.name].filter(Boolean).join(" ");
 
@@ -120,7 +146,7 @@
 
   async function lookupBarcode(code, seen) {
     code = String(code).replace(/\D/g, "");
-    render(`${bar()}<div class="reading"><span class="pulse" aria-hidden="true"></span>Looking up barcode ${esc(code)}…</div>`);
+    render(loader("Looking up this product", [`Reading barcode ${code}`, "Searching the product database", "Checking it against our list"], 1));
     wireBar();
     try {
       const body = await api(`/api/product?barcode=${encodeURIComponent(code)}`);
@@ -166,9 +192,7 @@
     let dataUrl;
     try { dataUrl = await shrink(file); }
     catch { return photoError(null, "That file couldn't be opened as an image. Try another photo, or type the ingredients."); }
-    render(`${bar()}
-      <img class="photo" src="${dataUrl}" alt="Your photo">
-      <div class="reading"><span class="pulse" aria-hidden="true"></span>Reading your photo…</div>`);
+    render(loader("Reading your photo", ["Reading the label", "Finding the product or its ingredients", "Checking them against our list"]));
     wireBar();
     let body;
     try {
@@ -188,12 +212,14 @@
 
   async function searchProduct(seen) {
     const q = productTitle(seen);
-    render(`${bar()}<div class="reading"><span class="pulse" aria-hidden="true"></span>Looking for ${esc(q)}…</div>`);
+    render(loader(niceName(q), ["Reading the label", "Searching the product database", "Checking it against our list"], 1));
     wireBar();
     try {
       const body = await api(`/api/product?q=${encodeURIComponent(q)}`);
-      if (!body.found) return webLookup(seen);
-      confirmProduct({ ...body.product, source: "search" }, q);
+      const p = body.found && body.product;
+      // Only trust the database hit if it's clearly the same product; otherwise search the web.
+      if (!p || nameMatch(q, productTitle(p)) < 0.75) return webLookup(seen);
+      showProduct({ ...p, source: "search" });
     } catch (err) {
       webLookup(seen);
     }
@@ -201,37 +227,33 @@
 
   async function webLookup(seen) {
     const q = seen.barcode ? `barcode ${seen.barcode}` : productTitle(seen);
-    render(`${bar()}<div class="reading"><span class="pulse" aria-hidden="true"></span>Finding the ingredients for ${esc(q)}…</div>
-      <p class="sub" style="margin-top:12px">This can take up to 20 seconds.</p>`);
-    wireBar();
+    render(loader(seen.barcode ? "Finding this product" : niceName(q), ["Reading the label", "Searching shops and ingredient sites", "Copying the ingredient list", "Checking it against our list"], 1));
+    wireBar(); advanceSteps(5000);
     try {
       const body = await api("/api/web-ingredients", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(seen) });
       if (!body.found) return notFound(`We couldn't find the ingredient list for ${q}.`);
-      confirmProduct({ ...body.product, source: "web" }, q);
+      showProduct({ ...body.product, source: "web" });
     } catch (err) {
       notFound(friendly(err, `We couldn't find the ingredient list for ${q}.`));
     }
   }
 
-  function confirmProduct(p, q) {
-    render(`${bar()}
-      <h1 class="title">Is this your product?</h1>
-      <p class="sub">${p.source === "web"
-        ? `We found this ingredient list for ${esc(q)} on ${esc(p.sourceName || "a product page")}.`
-        : `We read "${esc(q)}" from your photo and found this in the product database.`}</p>
-      <div class="found">
-        ${p.image ? `<img src="${esc(p.image)}" alt="" class="found-img">` : ""}
-        <div><strong>${esc(productTitle(p) || "Unnamed product")}</strong>
-        <p>${esc(p.ingredients.slice(0, 140))}${p.ingredients.length > 140 ? "…" : ""}</p></div>
-      </div>
-      <button class="btn" data-yes>Yes, check it</button>
-      <label class="btn ghost">No, photograph the ingredient list<input type="file" accept="image/*" data-photo hidden></label>`);
-    wireBar(); wirePhoto();
-    app.querySelector("[data-yes]").addEventListener("click", () => {
-      state.product = p;
-      state.text = p.ingredients;
-      results();
-    });
+  function showProduct(p) {
+    state.product = p;
+    state.text = p.ingredients;
+    results();
+  }
+
+  // "anua HEARTLEAF pore control" -> "Anua Heartleaf Pore Control"
+  function niceName(q) {
+    return String(q).toLowerCase().replace(/\b([a-z])/g, (m) => m.toUpperCase());
+  }
+  // Share of the words we read that also appear in the database product's name.
+  function nameMatch(a, b) {
+    const words = (x) => String(x).toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w.length > 2);
+    const want = words(a), have = new Set(words(b));
+    if (!want.length) return 0;
+    return want.filter((w) => have.has(w)).length / want.length;
   }
 
   function photoError(dataUrl, msg) {
@@ -263,7 +285,7 @@
   function itemHTML(x) {
     const e = x.entry;
     const dotClass = !e ? "none" : e.kind === "fine" ? "fine" : e.risk;
-    const score = e && e.rating != null ? `${e.rating}/5` : "";
+    const score = e && e.rating != null ? `<span class="pill ${dotClass}">${e.rating}/5</span>` : "";
     const sameName = e && PoreMatch.norm(e.name) === PoreMatch.norm(x.label);
     const top = e && e.kind === "watch" && x.position <= 7 ? `<span class="top">Near the top of the label (No. ${x.position})</span>` : "";
     const rows = [];
@@ -287,16 +309,34 @@
   function productHeader() {
     const p = state.product;
     if (!p || !productTitle(p)) return "";
-    const fromDb = p.source === "barcode" || p.source === "search";
-    const note = fromDb
-      ? `Ingredients from <a href="${esc(p.url || "https://world.openbeautyfacts.org")}">Open Beauty Facts</a>. Formulas change, so check they match your pack.`
-      : p.source === "web"
-        ? `Ingredients found on <a href="${esc(p.url)}">${esc(p.sourceName || "the web")}</a>. Check they match your pack.`
+    const src = p.source === "web"
+      ? `Ingredients from <a href="${esc(p.url)}">${esc(p.sourceName || "a product page")}</a>.`
+      : (p.source === "barcode" || p.source === "search")
+        ? `Ingredients from <a href="${esc(p.url || "https://world.openbeautyfacts.org")}">Open Beauty Facts</a>.`
         : "";
     return `<div class="product">
-      <strong>${esc(productTitle(p))}</strong>
-      ${note ? `<span>${note}</span>` : ""}
+      <strong>${esc(niceName(productTitle(p)))}</strong>
+      ${src ? `<span>${src} Formulas change, so check they match your pack. <label class="inline-link">Not right? Photograph the ingredient list<input type="file" accept="image/*" data-photo hidden></label></span>` : ""}
     </div>`;
+  }
+
+  // The colour groups on the results page, in the order they're shown.
+  const GROUPS = {
+    clog:    { label: "May clog pores",   cls: "g-clog",  hint: "Lab tests found these can clog pores. Tap one to see why." },
+    weak:    { label: "Weak warnings",    cls: "g-weak",  hint: "Some lists say these clog pores, but there's no solid study behind it. Worth knowing if your skin reacts to them." },
+    fungal:  { label: "Fungal acne",      cls: "g-fungal", hint: "Can feed the yeast behind fungal acne. That's a different problem from clogged pores." },
+    safe:    { label: "Safe for pores",   cls: "g-safe",  hint: "Tested and rated 0–1 out of 5, or known to be harmless. These won't clog pores." },
+    unknown: { label: "No rating yet",    cls: "g-unknown", hint: "Nobody has tested these for pore-clogging. That doesn't mean they're bad." },
+  };
+
+  function group(key, items, body) {
+    if (!items.length) return "";
+    const g = GROUPS[key];
+    return `<section class="group ${g.cls}">
+      <h2><span class="swatch" aria-hidden="true"></span>${g.label}<span class="count">${items.length}</span></h2>
+      <p class="hint">${g.hint}</p>
+      ${body || items.map(itemHTML).join("")}
+    </section>`;
   }
 
   function results(keep) {
@@ -305,15 +345,24 @@
     const watch = all.filter((x) => x.entry && x.entry.kind === "watch");
     const proven = watch.filter((x) => ["High", "Medium", "Low"].includes(x.entry.risk)).sort(byRisk);
     const weak = watch.filter((x) => ["Disputed", "Unverified"].includes(x.entry.risk)).sort(byRisk);
-    const flagged = state.strict ? [...proven, ...weak] : proven;
-    const fine = all.filter((x) => x.entry && x.entry.kind === "fine");
+    const clog = state.strict ? [...proven, ...weak] : proven;
+    const weakShown = state.strict ? [] : weak;
+    const safe = all.filter((x) => x.entry && x.entry.kind === "fine");
     const unknown = all.filter((x) => !x.entry);
     const fungal = all.filter((x) => x.fungal);
-    const n = flagged.length;
+    const n = clog.length;
 
     const headline = n === 0
-      ? (weak.length ? "Nothing proven to clog pores. A few ingredients have weaker warnings below." : "Nothing on our list of pore-cloggers.")
-      : `${n === 1 ? "ingredient" : "ingredients"} may clog pores${flagged.some((x) => x.position <= 7) ? ", including some near the top of the label" : ""}.`;
+      ? (weak.length ? "Nothing proven to clog pores. A few ingredients have weak warnings." : "Nothing in this product is known to clog pores.")
+      : `${n === 1 ? "ingredient" : "ingredients"} may clog pores${clog.some((x) => x.position <= 7) ? ", including some near the top of the label, where there's more of them" : ""}.`;
+
+    // At-a-glance bar: one coloured block per group, sized by count.
+    const parts = [["clog", clog.length], ["weak", weakShown.length], ["safe", safe.length], ["unknown", unknown.length]].filter(([, c]) => c);
+    const total = parts.reduce((t, [, c]) => t + c, 0) || 1;
+    const glance = `<div class="glance" aria-label="Summary">
+      <div class="bar">${parts.map(([k, c]) => `<span class="${GROUPS[k].cls}" style="flex:${c}"></span>`).join("")}</div>
+      <ul class="legend">${parts.map(([k, c]) => `<li class="${GROUPS[k].cls}"><span class="swatch"></span>${c} ${GROUPS[k].label.toLowerCase()}</li>`).join("")}</ul>
+    </div>`;
 
     render(`${bar()}
       ${productHeader()}
@@ -321,35 +370,20 @@
         <div class="num">${n}</div>
         <p>${esc(headline)}</p>
       </div>
+      ${total > 1 || parts.length ? glance : ""}
       <div class="toggles">
-        <label class="toggle"><input type="checkbox" data-t="strict" ${state.strict ? "checked" : ""}>Strict mode</label>
-        <label class="toggle"><input type="checkbox" data-t="fungal" ${state.fungal ? "checked" : ""}>Fungal acne</label>
+        <label class="toggle"><input type="checkbox" data-t="strict" ${state.strict ? "checked" : ""}>Strict mode<small>Count weak warnings too</small></label>
+        <label class="toggle"><input type="checkbox" data-t="fungal" ${state.fungal ? "checked" : ""}>Fungal acne<small>Show yeast triggers</small></label>
       </div>
-
-      ${flagged.length ? `<section class="group"><h2>May clog pores</h2>
-        <p class="hint">${state.strict ? "Strict mode is on, so weaker warnings are counted too." : "Backed by lab ratings. Tap one to see why."}</p>
-        ${flagged.map(itemHTML).join("")}</section>` : ""}
-
-      ${!state.strict && weak.length ? `<section class="group"><h2>Some sources say</h2>
-        <p class="hint">These appear on pore-clogging lists without solid studies behind them. Worth knowing if your skin reacts to them.</p>
-        ${weak.map(itemHTML).join("")}</section>` : ""}
-
-      ${state.fungal ? `<section class="group"><h2>Fungal acne triggers</h2>
-        <p class="hint">${fungal.length ? "Ingredients that can feed Malassezia, the yeast behind fungal acne." : "None found. Fungal acne is a yeast problem, separate from clogged pores."}</p>
-        ${fungal.map(itemHTML).join("")}</section>` : ""}
-
-      ${fine.length ? `<section class="group"><h2>Rated fine</h2>
-        <p class="hint">Rated 0–1 in lab tests, or considered inert.</p>
-        ${fine.map(itemHTML).join("")}</section>` : ""}
-
-      ${unknown.length ? `<section class="group"><h2>Not rated</h2>
-        <p class="hint">No rating found. That usually means nobody has tested it, not that it's a problem.</p>
-        <ul class="plain">${unknown.map((x) => `<li>${esc(x.label)}</li>`).join("")}</ul></section>` : ""}
-
+      ${group("clog", clog)}
+      ${group("weak", weakShown)}
+      ${state.fungal ? (fungal.length ? group("fungal", fungal) : `<section class="group g-fungal"><h2><span class="swatch" aria-hidden="true"></span>Fungal acne<span class="count">0</span></h2><p class="hint">No fungal acne triggers found.</p></section>`) : ""}
+      ${group("safe", safe)}
+      ${group("unknown", unknown, `<ul class="plain">${unknown.map((x) => `<li>${esc(x.label)}</li>`).join("")}</ul>`)}
       <div class="again"><button class="btn" data-again>Check another product</button>
       <button class="btn ghost" data-editlist>Edit this list</button></div>
       <p class="foot">Ratings mostly come from rabbit-ear tests of single ingredients at full strength. A whole product can behave differently. Not medical advice; patch-test new products.</p>`, keep);
-    wireBar();
+    wireBar(); wirePhoto();
     app.querySelectorAll("[data-t]").forEach((t) => t.addEventListener("change", () => {
       state[t.dataset.t] = t.checked; store.set(t.dataset.t, t.checked); results(true);
     }));

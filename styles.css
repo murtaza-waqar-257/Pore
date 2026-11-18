@@ -171,4 +171,49 @@ label.btn { cursor: pointer; }
 .found strong { font-size: 18px; }
 .found p { margin: 6px 0 0; font-size: 14px; color: var(--muted); }
 
-@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+/* Loader: a label being scanned */
+.loader { margin-top: 8px; }
+.scan { position: relative; overflow: hidden; padding: 22px 22px 18px; background: var(--petal); border: 1.5px solid var(--ink); border-radius: var(--radius); display: grid; gap: 11px; }
+.scan i { display: block; height: 9px; border-radius: 2px; background: var(--line); animation: fill 2.4s ease-in-out infinite; }
+.scan i:nth-child(2) { animation-delay: .25s; } .scan i:nth-child(3) { animation-delay: .5s; }
+.scan i:nth-child(4) { animation-delay: .75s; } .scan i:nth-child(5) { animation-delay: 1s; } .scan i:nth-child(6) { animation-delay: 1.25s; }
+.scan b { position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--sea); box-shadow: 0 0 18px 4px rgba(46, 139, 87, .35); animation: sweep 2.4s ease-in-out infinite; }
+@keyframes sweep { 0% { transform: translateY(0); } 50% { transform: translateY(150px); } 100% { transform: translateY(0); } }
+@keyframes fill { 0%, 100% { background: var(--line); } 45%, 55% { background: #b9d9c6; } }
+h1.loader-title { margin: 28px 0 16px; font-size: 32px; }
+.steps { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.steps li { position: relative; padding-left: 30px; color: #a3999a; font-size: 17px; transition: color .3s; }
+.steps li::before { content: ""; position: absolute; left: 0; top: 4px; width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid #c9bcb9; box-sizing: border-box; }
+.steps li.now { color: var(--ink); font-weight: 600; }
+.steps li.now::before { border: 2px solid var(--sea); border-right-color: transparent; animation: spin .8s linear infinite; }
+.steps li.done { color: var(--muted); }
+.steps li.done::before { background: var(--sea); border-color: var(--sea); }
+.steps li.done::after { content: ""; position: absolute; left: 5px; top: 7px; width: 5px; height: 8px; border: solid var(--petal); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Results: colour groups */
+.g-clog { --g: var(--high); --g-bg: #f6dcd7; }
+.g-weak { --g: var(--stone); --g-bg: #ebe4e1; }
+.g-fungal { --g: #7a5a99; --g-bg: #ece2f1; }
+.g-safe { --g: var(--sea); --g-bg: #d9ece0; }
+.g-unknown { --g: #b8aeab; --g-bg: transparent; }
+.glance { margin: 0 0 22px; }
+.glance .bar { display: flex; gap: 3px; height: 14px; border-radius: var(--radius); overflow: hidden; }
+.glance .bar span { background: var(--g); min-width: 6px; }
+.glance .legend { list-style: none; padding: 0; margin: 12px 0 0; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 15px; }
+.glance .legend li { display: flex; align-items: center; gap: 7px; }
+.swatch { display: inline-block; width: 12px; height: 12px; border-radius: 2px; background: var(--g); flex: none; }
+section.group { margin-top: 26px; padding: 18px 16px 6px; background: var(--g-bg); border-left: 4px solid var(--g); border-radius: var(--radius); }
+section.group.g-unknown { border: 1.5px dashed var(--line); border-left: 4px solid var(--g); padding-bottom: 16px; }
+section.group > h2 { display: flex; align-items: center; gap: 10px; font-size: 21px; font-weight: 700; margin: 0 0 4px; }
+section.group > h2 .count { margin-left: auto; font-size: 15px; font-weight: 700; color: var(--g); background: var(--petal); border-radius: 20px; padding: 2px 10px; }
+section.group details.item { border-top-color: rgba(30, 38, 34, .12); }
+section.group details.item:last-of-type { border-bottom: 0; }
+.pill { display: inline-block; font-size: 14px; font-weight: 700; padding: 2px 8px; border-radius: 20px; color: var(--petal); background: var(--stone); }
+.pill.High { background: var(--high); } .pill.Medium { background: var(--medium); } .pill.Low { background: var(--low); }
+.pill.fine { background: var(--sea); }
+.toggle small { color: var(--muted); font-size: 13px; margin-left: 2px; }
+.toggle { flex-wrap: wrap; }
+.inline-link { color: var(--sea-deep); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; display: inline; }
+
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } .scan b { display: none; } }
