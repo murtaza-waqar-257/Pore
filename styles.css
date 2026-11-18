@@ -57,7 +57,7 @@ header.bar { display: flex; align-items: baseline; justify-content: space-betwee
   color: var(--sea-deep); text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 1px;
 }
 
-.credit { margin: 18px 0 0; font-size: 14px; font-weight: 600; color: var(--sea-deep); }
+.credit { margin: 32px 0 0; padding-top: 16px; border-top: 1px solid var(--line); font-size: 13px; font-weight: 500; font-variation-settings: "wdth" 112; letter-spacing: .06em; text-transform: lowercase; color: #9a908c; }
 
 /* The three ways in */
 .ways { display: grid; gap: 10px; }
