@@ -33,13 +33,22 @@ End your reply with only this JSON, nothing after it:
 {"found": true or false, "brand": "...", "product_name": "...", "ingredients_text": "comma-separated list, exactly as on the page", "source_url": "the page you copied it from", "source_name": "site name"}`;
 }
 
+// Pull the final {"found": ...} object out of Claude's reply, even if text comes before it.
 function lastJSON(text) {
-  const matches = text.match(/\{[\s\S]*\}/g);
-  if (!matches) return null;
-  for (let i = matches.length - 1; i >= 0; i--) {
-    const m = matches[i];
-    const start = m.lastIndexOf('{"found"');
-    try { return JSON.parse(start >= 0 ? m.slice(start) : m); } catch {}
+  const idx = text.lastIndexOf('"found"');
+  if (idx < 0) return null;
+  const start = text.lastIndexOf("{", idx);
+  if (start < 0) return null;
+  // Walk forward to the matching closing brace, ignoring braces inside strings.
+  let depth = 0, inStr = false, esc = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) { if (esc) esc = false; else if (ch === "\\") esc = true; else if (ch === '"') inStr = false; continue; }
+    if (ch === '"') inStr = true;
+    else if (ch === "{") depth++;
+    else if (ch === "}" && --depth === 0) {
+      try { return JSON.parse(text.slice(start, i + 1)); } catch { return null; }
+    }
   }
   return null;
 }
@@ -58,7 +67,7 @@ async function callClaude(messages) {
       model: MODEL,
       max_tokens: 3000,
       output_config: { effort: "low" },
-      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 4 }],
+      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }],
       messages,
     }),
   });
@@ -106,7 +115,9 @@ export default async function handler(req, res) {
     const listOk = list && list.split(",").length >= 4;
 
     if (!out || !out.found || !listOk || !srcOk) {
-      return res.status(200).json({ found: false, searched: seenUrls.size });
+      const reason = !out ? "no_json" : !out.found ? "not_found_by_claude" : !listOk ? "list_too_short" : "source_not_in_search_results";
+      console.log("web lookup miss", reason, src, seenUrls.size);
+      return res.status(200).json({ found: false, reason, searched: seenUrls.size });
     }
     return res.status(200).json({
       found: true,
