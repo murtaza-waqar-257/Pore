@@ -201,12 +201,12 @@
 
   async function webLookup(seen) {
     const q = seen.barcode ? `barcode ${seen.barcode}` : productTitle(seen);
-    render(`${bar()}<div class="reading"><span class="pulse" aria-hidden="true"></span>Searching the web for ${esc(q)}'s ingredients…</div>
-      <p class="sub" style="margin-top:12px">It isn't in the product database, so this takes about 10 to 20 seconds.</p>`);
+    render(`${bar()}<div class="reading"><span class="pulse" aria-hidden="true"></span>Finding the ingredients for ${esc(q)}…</div>
+      <p class="sub" style="margin-top:12px">This can take up to 20 seconds.</p>`);
     wireBar();
     try {
       const body = await api("/api/web-ingredients", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(seen) });
-      if (!body.found) return notFound(`We couldn't find the ingredient list for ${q}, in the product database or on the web.`);
+      if (!body.found) return notFound(`We couldn't find the ingredient list for ${q}.`);
       confirmProduct({ ...body.product, source: "web" }, q);
     } catch (err) {
       notFound(friendly(err, `We couldn't find the ingredient list for ${q}.`));
@@ -217,7 +217,7 @@
     render(`${bar()}
       <h1 class="title">Is this your product?</h1>
       <p class="sub">${p.source === "web"
-        ? `We searched the web for ${esc(q)} and found this list on ${esc(p.sourceName || "a product page")}.`
+        ? `We found this ingredient list for ${esc(q)} on ${esc(p.sourceName || "a product page")}.`
         : `We read "${esc(q)}" from your photo and found this in the product database.`}</p>
       <div class="found">
         ${p.image ? `<img src="${esc(p.image)}" alt="" class="found-img">` : ""}
@@ -291,7 +291,7 @@
     const note = fromDb
       ? `Ingredients from <a href="${esc(p.url || "https://world.openbeautyfacts.org")}">Open Beauty Facts</a>. Formulas change, so check they match your pack.`
       : p.source === "web"
-        ? `Ingredients found on <a href="${esc(p.url)}">${esc(p.sourceName || "the web")}</a> by web search. Check they match your pack.`
+        ? `Ingredients found on <a href="${esc(p.url)}">${esc(p.sourceName || "the web")}</a> . Check they match your pack.`
         : "";
     return `<div class="product">
       <strong>${esc(productTitle(p))}</strong>
