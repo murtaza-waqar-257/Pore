@@ -1,0 +1,6 @@
+{
+  "functions": {
+    "api/web-ingredients.js": { "maxDuration": 60 },
+    "api/read-label.js": { "maxDuration": 30 }
+  }
+}
