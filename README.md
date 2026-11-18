@@ -17,6 +17,7 @@ A phone-friendly web page that checks skincare and makeup ingredient lists for i
 | `match.js` | Splits a label into ingredients and matches them (handles INCI names, brackets, CI colour codes, "may contain") |
 | `data.js` | 177 watch-list ingredients + 99 rated-fine ones, from the sheet |
 | `api/read-label.js` | Server function that sends a photo to Claude: returns the ingredient list if printed, plus brand, product name and barcode digits |
+| `api/web-ingredients.js` | When a product isn't in Open Beauty Facts, Claude searches the web for its ingredient list and must cite a page it found (about 1p per lookup) |
 | `api/product.js` | Server function that looks a barcode or product name up in Open Beauty Facts |
 | `vendor/zxing-browser.min.js` | Barcode reader (ZXing, MIT licence), runs on the phone |
 
@@ -31,7 +32,8 @@ Optional variables:
 
 - `CLAUDE_MODEL`: defaults to `claude-haiku-5-5` (the cheapest model, under 0.1p per scan).
 - `CONTACT_EMAIL`: your email, sent to Open Beauty Facts so they know who's calling (they ask apps to identify themselves).
-- `DAILY_SCANS_PER_IP`: defaults to 40. Basic limit only; also set a monthly spend limit in the Claude Console.
+- `DAILY_SCANS_PER_IP`: defaults to 40.
+- `DAILY_WEB_LOOKUPS_PER_IP`: defaults to 20. Basic limit only; also set a monthly spend limit in the Claude Console.
 
 ## Updating the ingredient data
 
